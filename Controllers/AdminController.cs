@@ -16,7 +16,7 @@ namespace MusicBaseApp.Controllers
         private static readonly string[] AllowedImageExtensions = { ".jpg", ".jpeg", ".png" };
 
         // Bucket Name - यह वही है जो आपने Supabase में बनाया था
-        private const string BucketName = "musicplayer-uploads";
+        private const string BucketName = "musicapp-files";
 
         public AdminController(AppDbContext context, Supabase.Client supabaseClient, IConfiguration configuration)
         {
