@@ -8,31 +8,22 @@ namespace MusicBaseApp.Controllers
     public class StreamController : ControllerBase
     {
         private readonly AppDbContext _context;
-        private readonly IWebHostEnvironment _env;
 
-        public StreamController(AppDbContext context, IWebHostEnvironment env)
+        public StreamController(AppDbContext context)
         {
             _context = context;
-            _env = env;
         }
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Stream(int id)
         {
             var song = await _context.Songs.FindAsync(id);
-            if (song == null)
+            if (song == null || string.IsNullOrEmpty(song.FilePath))
             {
                 return NotFound();
             }
 
-            var webRootPath = _env.WebRootPath ?? Path.Combine(AppContext.BaseDirectory, "wwwroot");
-            var fullPath = Path.Combine(webRootPath, song.FilePath.TrimStart('/'));
-            if (!System.IO.File.Exists(fullPath))
-            {
-                return NotFound();
-            }
-
-            return PhysicalFile(fullPath, "audio/mpeg", enableRangeProcessing: true);
+            return Redirect(song.FilePath);
         }
     }
 }

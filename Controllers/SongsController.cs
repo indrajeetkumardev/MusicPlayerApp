@@ -24,7 +24,8 @@ namespace MusicBaseApp.Controllers
                     s.Id,
                     s.Title,
                     s.Artist,
-                    s.CoverPath
+                    s.CoverPath,
+                    s.FilePath
                 })
                 .ToListAsync();
 

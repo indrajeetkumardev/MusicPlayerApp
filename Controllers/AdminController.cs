@@ -1,57 +1,93 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using MusicBaseApp.Data;
 using MusicBaseApp.Models;
+using MusicBaseApp.Services;
 
 namespace MusicBaseApp.Controllers
 {
     public class AdminController : Controller
     {
         private readonly AppDbContext _context;
-        private readonly IWebHostEnvironment _env;
+        private readonly CloudinaryService _cloudinaryService;
 
-        public AdminController(AppDbContext context, IWebHostEnvironment env)
+        private static readonly string[] AllowedAudioExtensions = { ".mp3" };
+        private static readonly string[] AllowedImageExtensions = { ".jpg", ".jpeg", ".png" };
+
+        public AdminController(AppDbContext context, CloudinaryService cloudinaryService)
         {
             _context = context;
-            _env = env;
+            _cloudinaryService = cloudinaryService;
         }
 
         [HttpGet]
-        public IActionResult Upload() => View(new SongUploadViewModel());
+        public IActionResult Upload()
+        {
+            return View(new SongUploadViewModel());
+        }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Upload(SongUploadViewModel model)
         {
-            if (!ModelState.IsValid) return View(model);
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
 
-            var uploadsFolder = Path.Combine(_env.WebRootPath, "uploads");
-            Directory.CreateDirectory(uploadsFolder);
+            var mp3Ext = Path.GetExtension(model.Mp3File.FileName).ToLowerInvariant();
+            if (!AllowedAudioExtensions.Contains(mp3Ext))
+            {
+                ModelState.AddModelError(nameof(model.Mp3File), "Only .mp3 files are allowed.");
+                return View(model);
+            }
 
-            var mp3FileName = $"{Guid.NewGuid()}.mp3";
-            var mp3Path = Path.Combine(uploadsFolder, mp3FileName);
-            using (var stream = new FileStream(mp3Path, FileMode.Create))
-                await model.Mp3File.CopyToAsync(stream);
-
-            string? coverFileName = null;
             if (model.CoverImage != null)
             {
-                coverFileName = $"{Guid.NewGuid()}.jpg";
-                var coverPath = Path.Combine(uploadsFolder, coverFileName);
-                using (var stream = new FileStream(coverPath, FileMode.Create))
-                    await model.CoverImage.CopyToAsync(stream);
+                var coverExt = Path.GetExtension(model.CoverImage.FileName).ToLowerInvariant();
+                if (!AllowedImageExtensions.Contains(coverExt))
+                {
+                    ModelState.AddModelError(nameof(model.CoverImage), "Only .jpg/.jpeg/.png files are allowed.");
+                    return View(model);
+                }
+            }
+
+            string mp3Url;
+            try
+            {
+                mp3Url = await _cloudinaryService.UploadAudioAsync(model.Mp3File);
+            }
+            catch (Exception ex)
+            {
+                ModelState.AddModelError(string.Empty, $"MP3 upload failed: {ex.Message}");
+                return View(model);
+            }
+
+            var coverUrl = string.Empty;
+            if (model.CoverImage != null)
+            {
+                try
+                {
+                    coverUrl = await _cloudinaryService.UploadImageAsync(model.CoverImage);
+                }
+                catch (Exception ex)
+                {
+                    ModelState.AddModelError(string.Empty, $"Cover upload failed: {ex.Message}");
+                    return View(model);
+                }
             }
 
             var song = new Song
             {
                 Title = model.Title,
                 Artist = model.Artist,
-                FilePath = $"/uploads/{mp3FileName}",
-                CoverPath = coverFileName != null ? $"/uploads/{coverFileName}" : null
+                FilePath = mp3Url,
+                CoverPath = coverUrl
             };
 
             _context.Songs.Add(song);
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = "Song uploaded!";
+            TempData["SuccessMessage"] = $"'{song.Title}' uploaded successfully.";
             return RedirectToAction(nameof(Upload));
         }
     }

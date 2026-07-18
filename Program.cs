@@ -1,15 +1,16 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using MusicBaseApp.Data;
+using MusicBaseApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Port Setup (Railway)
 var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
-// 🔥 SQL Server Connection
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(BuildPostgresConnectionString()));
+
+builder.Services.AddSingleton<CloudinaryService>();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
@@ -17,26 +18,16 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 🔥🔥🔥 MIGRATION NAHI – SIRF ENSURE CREATED!
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();   // ✅ Table create karega (agar nahi hai to)
+    db.Database.Migrate();
 }
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-}
-
-app.UseStaticFiles();
-
-// Uploads Folder Ensure
-var uploadsPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", "uploads");
-if (!Directory.Exists(uploadsPath))
-{
-    Directory.CreateDirectory(uploadsPath);
 }
 
 app.UseRouting();
@@ -49,3 +40,18 @@ app.MapControllerRoute(
 app.MapControllers();
 
 app.Run();
+
+static string BuildPostgresConnectionString()
+{
+    var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+    if (string.IsNullOrEmpty(databaseUrl))
+    {
+        throw new InvalidOperationException("DATABASE_URL environment variable is not set.");
+    }
+
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':');
+
+    return $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};" +
+           $"Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+}
